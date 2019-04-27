@@ -1,0 +1,68 @@
+image: golang:1.11.4
+
+services:
+- docker:dind
+
+stages:
+  - setup
+  - test
+  - build
+  
+variables:
+  PROJECT: jc93
+  COMMIT_SHA: $CI_COMMIT_SHA
+  
+.prep_go: &prep_go
+  before_script:
+    - export GL_URL=$(echo $CI_PROJECT_URL | awk -F/ '{print $3}')
+    - export GO_PROJECT_PATH="$GOPATH/src/$GL_URL/$CI_PROJECT_NAMESPACE"
+    - mkdir -p $GO_PROJECT_PATH
+    - ln -s $(pwd) $GO_PROJECT_PATH
+    - export GO_PROJECT_PATH="$GO_PROJECT_PATH/$CI_PROJECT_NAME"
+    - cd $GO_PROJECT_PATH
+build:
+  <<: *prep_go
+  stage: setup
+  script:
+    - go build
+
+gometa:
+  <<: *prep_go
+  stage: test
+  script:
+    - go vet -composites=false $(go list ./... | grep -v /vendor/)
+    - go fmt $(go list ./... | grep -v /vendor/)
+    
+  
+gotest:
+  <<: *prep_go
+  stage: test
+  allow_failure: false
+  script:
+    - go test -race -v $( go list ./... | grep -v '/vendor/' | grep -v '/scripts/' | grep -v '/gs/' )
+  
+build_on_branch:
+  stage: build
+  image: docker:git
+  stage: build
+  variables:
+    DOCKER_DRIVER: overlay
+    # DOCKER_HOST: tcp://localhost:2375
+  services:
+    - docker:dind
+  before_script:
+    - docker login -u ${DHUB_ROCKS_USER} -p $DHUB_ROCKS_PASSWORD
+  after_script:
+    - docker logout 
+  script:
+    - echo ${COMMIT_SHA:0:8}
+    - export REF_NAME="$(echo "${CI_COMMIT_REF_NAME}" | tr A-Z a-z)"
+    - export CI_CONTAINER_IMG="$(echo "${PROJECT}-${CI_PROJECT_NAME}-${REF_NAME}" | tr '/' '-')"
+    - echo $CI_CONTAINER_IMG
+    - docker build --label branch="${CI_COMMIT_REF_NAME}" --label commit="${COMMIT_SHA}" -t ${DHUB_ROCKS_USER}/${CI_CONTAINER_IMG}:${CI_COMMIT_SHA:0:8} -t ${DHUB_ROCKS_USER}/${CI_CONTAINER_IMG}:latest -f Dockerfile .
+    - docker push ${DHUB_ROCKS_USER}/${CI_CONTAINER_IMG}:${CI_COMMIT_SHA:0:8}
+    - docker push ${DHUB_ROCKS_USER}/${CI_CONTAINER_IMG}:latest
+    - docker rmi ${DHUB_ROCKS_USER}/${CI_CONTAINER_IMG}:${CI_COMMIT_SHA:0:8}
+    - docker push ${DHUB_ROCKS_USER}/${CI_CONTAINER_IMG}:latest
+  
+
