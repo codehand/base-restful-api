@@ -1,6 +1,6 @@
 FROM golang:1.11.4-alpine as builder
-WORKDIR /go/src/gitlab.com/lak8s/tamnt-l5s/
-COPY . /go/src/gitlab.com/lak8s/tamnt-l5s
+WORKDIR /go/src/github.com/base-restful-api/
+COPY . /go/src/github.com/base-restful-api
 RUN GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -o ./dist/app
 
 FROM alpine:3.5
@@ -10,6 +10,6 @@ RUN apk add --no-cache tzdata && \
   apk del tzdata
 
 WORKDIR /app
-COPY --from=builder go/src/gitlab.com/lak8s/tamnt-l5s/dist/app .
+COPY --from=builder go/src/github.com/base-restful-api/dist/app .
 EXPOSE 9090
 ENTRYPOINT ["./app"]
